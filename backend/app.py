@@ -2,17 +2,20 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pickle
 import re
+import os
 
 app = Flask(__name__)
 CORS(app)
 
 # -------------------------------
-# 📦 Load model
+# 📦 Load model safely
 # -------------------------------
-with open("model.pkl", "rb") as f:
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+with open(os.path.join(BASE_DIR, "model.pkl"), "rb") as f:
     model = pickle.load(f)
 
-with open("vectorizer.pkl", "rb") as f:
+with open(os.path.join(BASE_DIR, "vectorizer.pkl"), "rb") as f:
     vectorizer = pickle.load(f)
 
 
@@ -26,7 +29,7 @@ def clean_text(text):
 
 
 # -------------------------------
-# 🔍 Dynamic Explanation
+# 🔍 Explanation
 # -------------------------------
 def generate_explanation(text, prediction):
     text_lower = text.lower()
@@ -36,7 +39,6 @@ def generate_explanation(text, prediction):
 
     reasons = []
 
-    # 🔴 Fake case
     if prediction == 0:
         if any(word in text_lower for word in sensational_words):
             reasons.append("Uses sensational or attention-grabbing words")
@@ -45,18 +47,17 @@ def generate_explanation(text, prediction):
             reasons.append("Contains emotionally charged language")
 
         if not reasons:
-            reasons.append("Lacks strong factual indicators and appears uncertain")
+            reasons.append("Lacks strong factual indicators")
 
-    # 🟢 Real case
     else:
         if len(text.split()) > 10:
             reasons.append("Contains detailed and structured information")
 
         if not any(word in text_lower for word in sensational_words):
-            reasons.append("No sensational or misleading language detected")
+            reasons.append("No sensational language detected")
 
         if not reasons:
-            reasons.append("Appears to be neutral and informational")
+            reasons.append("Appears neutral and informational")
 
     return reasons
 
@@ -70,7 +71,7 @@ def home():
 
 
 # -------------------------------
-# 🤖 Prediction API
+# 🤖 Prediction API (FIXED)
 # -------------------------------
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -80,28 +81,24 @@ def predict():
     if not text:
         return jsonify({"error": "No text provided"}), 400
 
-    # 🧹 Clean text
+    # Clean
     processed = clean_text(text)
+
+    # Vectorize
     vector = vectorizer.transform([processed])
 
-    # 🤖 Model prediction
+    # 🔥 Proper ML prediction
     prediction = model.predict(vector)[0]
-    prob = model.predict_proba(vector)[0]
+    probabilities = model.predict_proba(vector)[0]
 
+    # Confidence
+    confidence = round(max(probabilities) * 100, 2)
+
+    # Label
     label = "Real" if prediction == 1 else "Fake"
-    confidence = round(max(prob) * 100, 2)
 
-    # 🔥 Improved override logic
-    if prediction == 0:
-        text_lower = text.lower()
-
-        if not any(word in text_lower for word in ["breaking", "shocking", "urgent", "alert", "exclusive"]):
-            label = "Real"
-            confidence = round(100 - confidence, 2)
-
-    # 🔍 Explanation (based on FINAL prediction)
-    final_prediction = 1 if label == "Real" else 0
-    reasons = generate_explanation(text, final_prediction)
+    # Explanation
+    reasons = generate_explanation(text, prediction)
 
     return jsonify({
         "prediction": label,
@@ -111,7 +108,7 @@ def predict():
 
 
 # -------------------------------
-# 🚀 Run app
+# 🚀 Run
 # -------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
