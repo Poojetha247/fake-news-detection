@@ -27,7 +27,7 @@ function Home() {
     setError("");
 
     try {
-      const res = await fetch("https://your-url.onrender.com/predict", {
+      const res = await fetch("https://fake-news-detection-vk6y.onrender.com/predict", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
