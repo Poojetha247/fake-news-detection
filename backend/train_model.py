@@ -1,74 +1,113 @@
-import pandas as pd
-import re
-import nltk
-from nltk.corpus import stopwords
-
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import SGDClassifier
-from sklearn.metrics import accuracy_score
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import pickle
+import re
+import os
 
-# Load data
-fake = pd.read_csv("../dataset/Fake.csv")
-true = pd.read_csv("../dataset/True.csv")
+app = Flask(__name__)
+CORS(app)
 
-fake["label"] = 0
-true["label"] = 1
+# -------------------------------
+# 📦 Load model safely
+# -------------------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Balance dataset
-min_count = min(len(fake), len(true))
-fake = fake.sample(min_count)
-true = true.sample(min_count)
+model_path = os.path.join(BASE_DIR, "model.pkl")
+vectorizer_path = os.path.join(BASE_DIR, "vectorizer.pkl")
 
-df = pd.concat([fake, true])
-df = df.sample(frac=1).reset_index(drop=True)
+# 🔥 DEBUG: print model file info
+print("🚀 Loading model from:", model_path)
+print("📦 MODEL SIZE:", os.path.getsize(model_path), "bytes")
 
-df["content"] = df["title"] + " " + df["text"]
-df = df[["content", "label"]]
+with open(model_path, "rb") as f:
+    model = pickle.load(f)
 
-# Preprocessing
-try:
-    stopwords.words("english")
-except:
-    nltk.download("stopwords")
+with open(vectorizer_path, "rb") as f:
+    vectorizer = pickle.load(f)
 
-stop_words = set(stopwords.words("english"))
 
-def preprocess(text):
+# -------------------------------
+# 🧹 Text Cleaning
+# -------------------------------
+def clean_text(text):
     text = text.lower()
     text = re.sub(r'[^a-z\s]', '', text)
-    words = text.split()
-    words = [w for w in words if w not in stop_words]
-    return " ".join(words)
+    return text
 
-df["content"] = df["content"].apply(preprocess)
 
-# Split
-X = df["content"]
-y = df["label"]
+# -------------------------------
+# 🔍 Explanation
+# -------------------------------
+def generate_explanation(text, prediction):
+    text_lower = text.lower()
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
+    sensational_words = ["breaking", "shocking", "exclusive", "urgent", "alert"]
+    emotional_words = ["hate", "fear", "anger", "panic"]
 
-# Vectorization
-vectorizer = TfidfVectorizer(max_features=10000, ngram_range=(1,2))
-X_train_vec = vectorizer.fit_transform(X_train)
-X_test_vec = vectorizer.transform(X_test)
+    reasons = []
 
-# Model
-model = SGDClassifier(loss='log_loss')
-model.fit(X_train_vec, y_train)
+    if prediction == 0:
+        if any(word in text_lower for word in sensational_words):
+            reasons.append("Uses sensational or attention-grabbing words")
 
-# 🔥 Evaluation
-y_pred = model.predict(X_test_vec)
-accuracy = accuracy_score(y_test, y_pred)
+        if any(word in text_lower for word in emotional_words):
+            reasons.append("Contains emotionally charged language")
 
-print("✅ Accuracy:", accuracy)
+        if not reasons:
+            reasons.append("Lacks strong factual indicators")
 
-# Save model
-pickle.dump(model, open("model.pkl", "wb"))
-pickle.dump(vectorizer, open("vectorizer.pkl", "wb"))
+    else:
+        if len(text.split()) > 10:
+            reasons.append("Contains detailed and structured information")
 
-print("✅ Model trained and saved!")
+        if not any(word in text_lower for word in sensational_words):
+            reasons.append("No sensational language detected")
+
+        if not reasons:
+            reasons.append("Appears neutral and informational")
+
+    return reasons
+
+
+# -------------------------------
+# 🏠 Home
+# -------------------------------
+@app.route("/")
+def home():
+    return "Backend is running"
+
+
+# -------------------------------
+# 🤖 Prediction API
+# -------------------------------
+@app.route("/predict", methods=["POST"])
+def predict():
+    data = request.get_json()
+    text = data.get("text", "")
+
+    if not text:
+        return jsonify({"error": "No text provided"}), 400
+
+    processed = clean_text(text)
+    vector = vectorizer.transform([processed])
+
+    prediction = model.predict(vector)[0]
+    probabilities = model.predict_proba(vector)[0]
+
+    confidence = round(max(probabilities) * 100, 2)
+    label = "Real" if prediction == 1 else "Fake"
+
+    reasons = generate_explanation(text, prediction)
+
+    return jsonify({
+        "prediction": label,
+        "confidence": confidence,
+        "reasons": reasons
+    })
+
+
+# -------------------------------
+# 🚀 Run
+# -------------------------------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)

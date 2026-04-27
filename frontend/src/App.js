@@ -2,7 +2,6 @@ import { useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import History from "./History";
 
-// 🟢 HOME COMPONENT
 function Home() {
   const [text, setText] = useState("");
   const [result, setResult] = useState(null);
@@ -32,13 +31,23 @@ function Home() {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ text })
+        body: JSON.stringify({ text }),
+        cache: "no-store" // 🔥 prevent caching
       });
 
       if (!res.ok) throw new Error("Server error");
 
       const data = await res.json();
-      setResult(data);
+
+      // 🔥 DEBUG (VERY IMPORTANT)
+      console.log("API RESPONSE:", data);
+
+      // ✅ SAFE SET (avoid stale/wrong data)
+      setResult({
+        prediction: data.prediction,
+        confidence: Number(data.confidence),
+        reasons: data.reasons || []
+      });
 
       // Save history
       const newEntry = {
@@ -52,7 +61,7 @@ function Home() {
 
     } catch (err) {
       console.error(err);
-      setError("⚠️ Unable to connect to backend. Make sure server is running.");
+      setError("⚠️ Unable to connect to backend.");
     }
 
     setLoading(false);
@@ -69,13 +78,12 @@ function Home() {
       }`}
     >
 
-      {/* 🔥 NEW HEADER */}
       <h1 className="text-3xl font-bold text-gray-800 mb-2 text-center">
         🧠 AI-Powered Fake News Analysis System
       </h1>
 
       <p className="text-gray-500 text-sm mb-6 text-center">
-        Detects misinformation using machine learning with explainable insights
+        Detects misinformation using machine learning
       </p>
 
       {/* INPUT */}
@@ -88,7 +96,6 @@ function Home() {
           rows="5"
         />
 
-        {/* 🔥 DYNAMIC BUTTON */}
         <button
           onClick={handlePredict}
           disabled={loading}
@@ -103,14 +110,12 @@ function Home() {
           {loading ? "Analyzing..." : "Analyze News"}
         </button>
 
-        {/* LOADING */}
         {loading && (
           <div className="flex justify-center mt-4">
             <div className="w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
         )}
 
-        {/* ERROR */}
         {error && (
           <div className="mt-4 text-red-600 text-sm">
             {error}
@@ -138,12 +143,10 @@ function Home() {
             Confidence: <strong>{result.confidence}%</strong>
           </p>
 
-          {/* MODEL NOTE */}
           <div className="text-sm text-gray-500 italic mb-4">
             ⚠️ Model performs better on longer, detailed news articles.
           </div>
 
-          {/* ANALYSIS */}
           {result.reasons && (
             <div>
               <h3 className="font-semibold text-gray-800 mb-2">
@@ -161,7 +164,6 @@ function Home() {
         </div>
       )}
 
-      {/* HISTORY */}
       <div className="mt-8">
         <Link to="/history" className="text-blue-600 underline">
           View Prediction History →
@@ -172,7 +174,6 @@ function Home() {
   );
 }
 
-// ROUTER
 function App() {
   return (
     <Router>
