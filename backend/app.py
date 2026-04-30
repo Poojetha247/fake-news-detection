@@ -8,14 +8,20 @@ app = Flask(__name__)
 CORS(app)
 
 # -------------------------------
-# 📦 Load model safely
+# 📦 Load model safely (FIXED)
 # -------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-with open(os.path.join(BASE_DIR, "model.pkl"), "rb") as f:
+model_path = os.path.join(BASE_DIR, "model.pkl")
+vectorizer_path = os.path.join(BASE_DIR, "vectorizer.pkl")
+
+# 🔥 DEBUG LINE (VERY IMPORTANT)
+print("📦 MODEL SIZE:", os.path.getsize(model_path))
+
+with open(model_path, "rb") as f:
     model = pickle.load(f)
 
-with open(os.path.join(BASE_DIR, "vectorizer.pkl"), "rb") as f:
+with open(vectorizer_path, "rb") as f:
     vectorizer = pickle.load(f)
 
 
@@ -63,7 +69,7 @@ def generate_explanation(text, prediction):
 
 
 # -------------------------------
-# 🏠 Home
+# 🏠 Home Route
 # -------------------------------
 @app.route("/")
 def home():
@@ -71,7 +77,7 @@ def home():
 
 
 # -------------------------------
-# 🤖 Prediction API (FIXED)
+# 🤖 Prediction API
 # -------------------------------
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -81,17 +87,17 @@ def predict():
     if not text:
         return jsonify({"error": "No text provided"}), 400
 
-    # Clean
+    # Clean text
     processed = clean_text(text)
 
-    # Vectorize
+    # Convert to vector
     vector = vectorizer.transform([processed])
 
-    # 🔥 Proper ML prediction
+    # Model prediction
     prediction = model.predict(vector)[0]
     probabilities = model.predict_proba(vector)[0]
 
-    # Confidence
+    # Confidence score
     confidence = round(max(probabilities) * 100, 2)
 
     # Label
@@ -108,7 +114,7 @@ def predict():
 
 
 # -------------------------------
-# 🚀 Run
+# 🚀 Run Server
 # -------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
